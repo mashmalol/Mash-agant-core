@@ -29,7 +29,16 @@ git status --short
 $status = git status --porcelain
 if ($status) {
     Write-Host "💾 Committing changes..." -ForegroundColor Cyan
-    $commitMessage = "Add Streamlit web UI with API key input and ERC721 contract generation"
+    $commitMessage = @"
+Add .env file support and multi-provider API integration
+
+- Add .env.example template for easy API key configuration
+- Add python-dotenv for automatic .env loading
+- Support for OpenAI, Anthropic, and Azure OpenAI providers
+- Update UI with provider selection dropdown
+- Add comprehensive documentation (ENV_SETUP.md, API_PROVIDERS.md)
+- Update metadata to include AI responses separately
+"@
     git commit -m $commitMessage
 } else {
     Write-Host "ℹ️  No changes to commit" -ForegroundColor Yellow

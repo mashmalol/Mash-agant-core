@@ -37,7 +37,7 @@ streamlit run ui.py
 - **Model Selection** - Choose between gpt-4o-mini, gpt-4o, gpt-4, or gpt-3.5-turbo
 - **Initialize Button** - Start the agent with your API key
 - **Status Display** - See if agent is ready
-- **Contract Info** - View the hard-coded owner address
+- **Contract Owner Address** - Set and view the owner address for ERC721 contracts
 - **Clear History** - Clear all chat messages
 - **Pulse Button** - Generate ERC721 contract with chat history
 

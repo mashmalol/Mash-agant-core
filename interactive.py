@@ -7,23 +7,31 @@ Press the pulse button to generate an ERC721 contract with your chat history.
 
 import asyncio
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from agent import get_agent, add_to_chat_history, get_chat_history, pulse_button, clear_chat_history
 
-async def interactive_session(api_key: str | None = None, model_id: str = "gpt-4o-mini", core_file_path: str = "core.json"):
+async def interactive_session(api_key: str | None = None, model_id: str = "gpt-4o-mini", provider: str = "openai", core_file_path: str = "core.json", **kwargs):
     """Run an interactive session with the agent.
     
     Args:
-        api_key: OpenAI API key. If None, uses OPENAI_API_KEY environment variable.
-        model_id: OpenAI model ID (default: "gpt-4o-mini").
+        api_key: API key for the provider. If None, uses environment variables.
+        model_id: Model ID (default: "gpt-4o-mini" for OpenAI).
+        provider: Provider name - "openai", "anthropic", "azure" (default: "openai").
         core_file_path: Path to the JSON file containing agent core specification.
+        **kwargs: Additional provider-specific arguments (e.g., azure_endpoint, api_version for Azure).
     """
     print("=" * 70)
     print("🤖 Agent Chatbot Interface")
     print("=" * 70)
-    print("\nInitializing agent...")
+    print(f"\nProvider: {provider.upper()}")
+    print("Initializing agent...")
     
     # Create agent
-    agent = get_agent(api_key=api_key, model_id=model_id, core_file_path=core_file_path)
+    agent = get_agent(api_key=api_key, model_id=model_id, provider=provider, core_file_path=core_file_path, **kwargs)
     
     print("\n" + "=" * 70)
     print("✨ Agent is ready! Start chatting below.")

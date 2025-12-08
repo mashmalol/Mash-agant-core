@@ -28,7 +28,7 @@ git add .
 
 REM Commit changes
 echo 💾 Committing changes...
-git commit -m "Add Streamlit web UI with API key input and ERC721 contract generation"
+git commit -m "Add .env file support and multi-provider API integration - Add .env.example template - Add python-dotenv - Support OpenAI/Anthropic/Azure - Update UI with provider selection - Add documentation"
 
 REM Rename branch to main
 echo 🌿 Setting branch to main...

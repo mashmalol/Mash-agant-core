@@ -8,13 +8,19 @@ import asyncio
 import json
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from agent import (
     get_agent,
     add_to_chat_history,
     get_chat_history,
     clear_chat_history,
     pulse_button,
-    OWNER_ADDRESS
+    get_owner_address,
+    load_core_json
 )
 
 # Page configuration
@@ -66,6 +72,10 @@ if "api_key_set" not in st.session_state:
     st.session_state.api_key_set = False
 if "chat_history_loaded" not in st.session_state:
     st.session_state.chat_history_loaded = False
+if "provider" not in st.session_state:
+    st.session_state.provider = "openai"
+if "model_id" not in st.session_state:
+    st.session_state.model_id = "gpt-4o-mini"
 
 def load_chat_history_to_session():
     """Load chat history from agent module to session state."""
@@ -80,62 +90,155 @@ def load_chat_history_to_session():
             })
         st.session_state.chat_history_loaded = True
 
-def initialize_agent(api_key: str, model_id: str = "gpt-4o-mini"):
-    """Initialize the agent with the provided API key."""
+def initialize_agent(api_key: str, model_id: str = "gpt-4o-mini", provider: str = "openai", **kwargs):
+    """Initialize the agent with the provided API key and provider."""
     try:
-        agent = get_agent(api_key=api_key, model_id=model_id)
+        agent = get_agent(api_key=api_key, model_id=model_id, provider=provider, **kwargs)
         st.session_state.agent = agent
         st.session_state.api_key_set = True
+        st.session_state.provider = provider
+        st.session_state.model_id = model_id
         return True
     except Exception as e:
         st.error(f"Error initializing agent: {str(e)}")
         return False
 
+def get_models_for_provider(provider: str) -> list:
+    """Get available models for a provider."""
+    models = {
+        "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+        "anthropic": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+        "azure": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]  # Azure uses OpenAI models
+    }
+    return models.get(provider.lower(), models["openai"])
+
 # Sidebar for API key and settings
 with st.sidebar:
     st.title("⚙️ Settings")
     
-    # API Key Input
-    st.subheader("🔑 API Key")
-    api_key = st.text_input(
-        "Enter your OpenAI API Key",
-        type="password",
-        placeholder="sk-...",
-        help="Enter your OpenAI API key to start chatting with the agent."
+    # Provider selection
+    st.subheader("🤖 AI Provider")
+    provider = st.selectbox(
+        "Select AI Provider",
+        ["openai", "anthropic", "azure"],
+        index=0,
+        help="Choose your AI provider"
     )
     
-    # Model selection
+    # Provider-specific settings
+    provider_config = {}
+    
+    if provider == "azure":
+        st.info("💡 Azure OpenAI requires endpoint and API version")
+        azure_endpoint = st.text_input(
+            "Azure Endpoint",
+            value=os.environ.get("AZURE_OPENAI_ENDPOINT", ""),
+            placeholder="https://your-resource.openai.azure.com/",
+            help="Your Azure OpenAI endpoint URL"
+        )
+        api_version = st.text_input(
+            "API Version",
+            value=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
+            help="Azure OpenAI API version"
+        )
+        if azure_endpoint:
+            provider_config["azure_endpoint"] = azure_endpoint
+        if api_version:
+            provider_config["api_version"] = api_version
+    
+    # API Key Input
+    st.subheader("🔑 API Key")
+    api_key_placeholder = {
+        "openai": "sk-...",
+        "anthropic": "sk-ant-...",
+        "azure": "Azure API key"
+    }.get(provider, "API key...")
+    
+    api_key_env_var = {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "azure": "AZURE_OPENAI_API_KEY"
+    }.get(provider, "OPENAI_API_KEY")
+    
+    api_key = st.text_input(
+        f"Enter your {provider.upper()} API Key",
+        type="password",
+        placeholder=api_key_placeholder,
+        value=os.environ.get(api_key_env_var, ""),
+        help=f"Enter your {provider.upper()} API key. Can also set {api_key_env_var} environment variable."
+    )
+    
+    # Model selection based on provider
+    available_models = get_models_for_provider(provider)
+    default_model = available_models[0]
+    
+    # Try to get saved model or use default
+    current_model = st.session_state.get("model_id", default_model)
+    if current_model not in available_models:
+        current_model = default_model
+    
+    model_index = available_models.index(current_model) if current_model in available_models else 0
+    
     model_id = st.selectbox(
         "Select Model",
-        ["gpt-4o-mini", "gpt-4o", "gpt-4", "gpt-3.5-turbo"],
-        index=0,
-        help="Choose the OpenAI model to use"
+        available_models,
+        index=model_index,
+        help=f"Choose the {provider.upper()} model to use"
     )
     
     # Initialize button
     if st.button("🚀 Initialize Agent", use_container_width=True):
         if api_key:
-            with st.spinner("Initializing agent..."):
-                if initialize_agent(api_key, model_id):
-                    st.success("✅ Agent initialized successfully!")
+            with st.spinner(f"Initializing {provider.upper()} agent..."):
+                if initialize_agent(api_key, model_id, provider, **provider_config):
+                    st.success(f"✅ {provider.upper()} Agent initialized successfully!")
                     st.rerun()
         else:
-            st.warning("⚠️ Please enter your API key first")
+            st.warning(f"⚠️ Please enter your {provider.upper()} API key first")
     
     # Status
     st.divider()
     st.subheader("📊 Status")
     if st.session_state.api_key_set:
         st.success("✅ Agent Ready")
-        st.info(f"🤖 Model: {model_id}")
+        current_provider = st.session_state.get("provider", "openai")
+        current_model = st.session_state.get("model_id", model_id)
+        st.info(f"🤖 Provider: {current_provider.upper()}")
+        st.info(f"📝 Model: {current_model}")
     else:
         st.warning("⚠️ Agent Not Initialized")
     
-    # Owner address info
+    # Owner address configuration
     st.divider()
-    st.subheader("🔐 Contract Info")
-    st.code(OWNER_ADDRESS, language=None)
-    st.caption("Hard-coded owner address for ERC721 contracts")
+    st.subheader("🔐 Contract Owner Address")
+    
+    # Get current owner address
+    current_owner = get_owner_address()
+    
+    owner_address = st.text_input(
+        "ERC721 Owner Address",
+        value=current_owner if current_owner else "",
+        placeholder="0x...",
+        help="Set the owner address for generated ERC721 contracts. Can be set in core.json or here."
+    )
+    
+    if owner_address and owner_address != current_owner:
+        # Save to core.json
+        try:
+            core_json = load_core_json()
+            core_json["owner"] = owner_address
+            with open("core.json", 'w', encoding='utf-8') as f:
+                json.dump(core_json, f, indent=2)
+            st.success("✅ Owner address saved to core.json")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error saving owner address: {e}")
+    
+    if current_owner:
+        st.code(current_owner, language=None)
+        st.caption("Owner address for ERC721 contracts")
+    else:
+        st.warning("⚠️ Owner address not set. Set it above before generating contracts.")
     
     # Actions
     st.divider()
@@ -151,10 +254,15 @@ with st.sidebar:
     # Pulse button
     if st.button("🔘 Generate ERC721 Contract", use_container_width=True, type="primary"):
         if st.session_state.api_key_set:
-            with st.spinner("Generating ERC721 contract..."):
-                result = pulse_button()
-                st.success("✅ Contract generated!")
-                st.info(result)
+            # Get owner address
+            owner_addr = get_owner_address()
+            if not owner_addr:
+                st.error("⚠️ Please set the owner address above before generating contracts.")
+            else:
+                with st.spinner("Generating ERC721 contract..."):
+                    result = pulse_button(owner_address=owner_addr)
+                    st.success("✅ Contract generated!")
+                    st.info(result)
         else:
             st.warning("⚠️ Please initialize the agent first")
 
@@ -229,5 +337,9 @@ with col2:
     else:
         st.caption("⚠️ Agent Inactive")
 with col3:
-    st.caption(f"🔐 Owner: {OWNER_ADDRESS[:10]}...")
+    owner_addr = get_owner_address()
+    if owner_addr:
+        st.caption(f"🔐 Owner: {owner_addr[:10]}...")
+    else:
+        st.caption("🔐 Owner: Not set")
 
